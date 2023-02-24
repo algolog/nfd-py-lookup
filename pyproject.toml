@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nfd-py-lookup"
+authors = [
+  { name="algolog", email="114208957+algolog@users.noreply.github.com" },
+]
+description = "On-chain queries to Algorand's NFDomains name service"
+readme = "README.md"
+requires-python = ">=3.7"
+dependencies = [
+    "py-algorand-sdk",
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dynamic = ["version"]
+
+[project.urls]
+"Homepage" = "https://github.com/algolog/nfd-py-lookup"
+"Bug Tracker" = "https://github.com/algolog/nfd-py-lookup/issues"
+
+[tool.setuptools.dynamic]
+version = {attr = "nfdlookup.__version__"}
