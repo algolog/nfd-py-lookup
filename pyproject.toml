@@ -5,13 +5,13 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "nfd-py-lookup"
 authors = [
-  { name="algolog", email="114208957+algolog@users.noreply.github.com" },
+  { name="algolog", email="algolog@tuta.io" },
 ]
 description = "On-chain queries to Algorand's NFDomains name service"
 readme = "README.md"
 requires-python = ">=3.7"
 dependencies = [
-    "py-algorand-sdk",
+    "py-algorand-sdk >= 2.0.0",
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
