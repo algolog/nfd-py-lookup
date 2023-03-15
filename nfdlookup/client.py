@@ -5,7 +5,7 @@ from algosdk.encoding import decode_address, encode_address
 from .constants import TESTNET_REGISTRY_APP_ID, MAINNET_REGISTRY_APP_ID
 from .contracts import get_nfd_name_logicsig, get_nfd_revaddress_logicsig
 from .nfdproperties import NFDProperties
-from .utils import unpack_uints, get_global_state
+from .utils import unpack_uints, get_global_state, get_app_info_bytes
 
 
 class NFDClient:
@@ -21,9 +21,7 @@ class NFDClient:
             info = self.algod.account_application_info(address, self.registry_app_id)
         except AlgodHTTPError:
             return None
-        key_vals = info['app-local-state']['key-value']
-        app_id_val = [kv['value'] for kv in key_vals if kv['key'] == b64encode(b'i.appid').decode()]
-        app_id = int.from_bytes(b64decode(app_id_val[0]['bytes']), 'big')
+        app_id = int.from_bytes(get_app_info_bytes(info, 'i.appid'), 'big')
         return app_id
 
     def find_nfd_app_ids_by_address(self, lookup_address: str) -> list[int]:
@@ -34,9 +32,7 @@ class NFDClient:
             info = self.algod.account_application_info(address, self.registry_app_id)
         except AlgodHTTPError:
             return None
-        key_vals = info['app-local-state']['key-value']
-        app_id_val = [kv['value'] for kv in key_vals if kv['key'] == b64encode(b'i.apps0').decode()]
-        app_ids = unpack_uints(b64decode(app_id_val[0]['bytes']))
+        app_ids = unpack_uints(get_app_info_bytes(info, 'i.apps0'))
         return app_ids
 
     def lookup_address(self, address: str) -> list[str]:

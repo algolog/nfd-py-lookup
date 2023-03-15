@@ -43,6 +43,19 @@ def unpack_addresses(data: bytes) -> list:
     return algo_addresses
 
 
+def get_app_info_bytes(app_info, key):
+    """Get bytes value from application info local state dict for given key."""
+    if type(key) == str:
+        key = b64encode(key.encode())
+
+    key_vals = app_info['app-local-state']['key-value']
+    value = {'bytes': ''}
+    for kv in key_vals:
+        if kv['key'] == key.decode():
+            value = kv['value']
+    return b64decode(value['bytes'])
+
+
 def format_state_keys(state):
     """Format state dict by base64 decoding keys"""
     formatted_state = {}
