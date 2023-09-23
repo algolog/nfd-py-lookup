@@ -80,3 +80,14 @@ def get_global_state(algod_client, app_id):
     except:
         raise Exception("Application does not exist.")
     return format_state_keys(app_info["params"]["global-state"])
+
+
+def get_application_boxes(algod_client, app_id) -> dict[str, str]:
+    """Return all application boxes as a dictionary box_name_str -> box_value_base64"""
+    box_data = dict()
+    boxes = algod_client.application_boxes(app_id)
+    for box in boxes["boxes"]:
+        box_name = b64decode(box["name"])
+        box_value = algod_client.application_box_by_name(app_id, box_name)
+        box_data[box_name.decode()] = box_value["value"]
+    return box_data

@@ -5,11 +5,13 @@ from algosdk.encoding import is_valid_address
 
 
 def print_addresses(client: NFDMainnetClient, name: str):
+    filter_out = ["i.commission1Agent", "i.seller"]
     res = client.lookup_name(name)
     if res is not None:
         for key in res:
-            if key == "i.owner.a":
-                print(f"{key}: {res[key]}")
+            if key.endswith(".a"):
+                if not any(key.startswith(prefix) for prefix in filter_out):
+                    print(f"{key}: {res[key]}")
             elif key.endswith(".as"):
                 for n, val in enumerate(res[key]):
                     print(f"{key}[{n}]: {val}")
@@ -20,7 +22,7 @@ def main():
         print(f"Usage: {sys.argv[0]} nfd[.algo] | ADDRESS")
         sys.exit(0)
 
-    algod_address = ""
+    algod_address = "https://mainnet-api.algonode.cloud"
     algod_token = ""
     algod = AlgodClient(algod_token, algod_address)
     client = NFDMainnetClient(algod)

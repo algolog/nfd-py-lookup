@@ -1,11 +1,14 @@
+from hashlib import sha256
 from algosdk.transaction import LogicSigAccount
 from .constants import LOOKUP_LOGIC_SIG_TEMPLATE
 from .utils import encode_uvarint
 
 
-def get_lookup_logicsig(prefix: str, lookup_str: str, registry_app_id: int) -> LogicSigAccount:
+def get_lookup_logicsig(
+    prefix: str, lookup_str: str, registry_app_id: int
+) -> LogicSigAccount:
     program = bytearray(LOOKUP_LOGIC_SIG_TEMPLATE)
-    program[6:14] = registry_app_id.to_bytes(8, 'big')
+    program[6:14] = registry_app_id.to_bytes(8, "big")
     bytes_to_append = (prefix + lookup_str).encode()
     program += encode_uvarint(len(bytes_to_append))
     program += bytes_to_append
@@ -13,10 +16,18 @@ def get_lookup_logicsig(prefix: str, lookup_str: str, registry_app_id: int) -> L
 
 
 def get_nfd_revaddress_logicsig(address: str, registry_app_id: int):
-    lsig = get_lookup_logicsig('address/', address, registry_app_id)
+    lsig = get_lookup_logicsig("address/", address, registry_app_id)
     return lsig
 
 
 def get_nfd_name_logicsig(nfd_name: str, registry_app_id: int):
-    lsig = get_lookup_logicsig('name/', nfd_name, registry_app_id)
+    lsig = get_lookup_logicsig("name/", nfd_name, registry_app_id)
     return lsig
+
+
+def get_registry_box_name_for_nfd(nfd_name: str) -> bytes:
+    return sha256(("name/" + nfd_name).encode()).digest()
+
+
+def get_registry_box_name_for_address(algo_address: bytes) -> bytes:
+    return sha256(b"addr/algo/" + algo_address).digest()

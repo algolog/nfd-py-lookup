@@ -2,10 +2,16 @@ from base64 import b64encode, b64decode
 from algosdk.v2client.algod import AlgodClient
 from algosdk.error import AlgodHTTPError
 from algosdk.encoding import decode_address, encode_address
+from algosdk.logic import get_application_address
 from .constants import TESTNET_REGISTRY_APP_ID, MAINNET_REGISTRY_APP_ID
-from .contracts import get_nfd_name_logicsig, get_nfd_revaddress_logicsig
+from .contracts import (
+    get_nfd_name_logicsig,
+    get_nfd_revaddress_logicsig,
+    get_registry_box_name_for_nfd,
+    get_registry_box_name_for_address,
+)
 from .nfdproperties import NFDProperties
-from .utils import unpack_uints, get_global_state, get_app_info_bytes
+from .utils import unpack_uints, get_global_state, get_app_info_bytes, get_application_boxes
 
 
 class NFDClient:
@@ -15,24 +21,64 @@ class NFDClient:
         self.network = network
 
     def find_nfd_app_id_by_name(self, nfd_name: str):
-        lsig = get_nfd_name_logicsig(nfd_name, self.registry_app_id)
-        address = lsig.address()
+        app_id = None
         try:
-            info = self.algod.account_application_info(address, self.registry_app_id)
+            # First try to resolve via V2
+            box = self.algod.application_box_by_name(
+                self.registry_app_id, get_registry_box_name_for_nfd(nfd_name)
+            )
+            box_value = b64decode(box["value"])
+            # The box data is stored as {ASA ID}{APP ID} - packed 64-bit ints
+            if len(box_value) != 16:
+                raise ValueError(
+                    f"box data is invalid - {len(box_value)=} but should be 16 for {nfd_name=}"
+                )
+            app_id = int.from_bytes(box_value[8:], "big")
+            print("Found as V2 name")
         except AlgodHTTPError:
-            return None
-        app_id = int.from_bytes(get_app_info_bytes(info, 'i.appid'), 'big')
+            # Fall back to V1 approach
+            lsig = get_nfd_name_logicsig(nfd_name, self.registry_app_id)
+            address = lsig.address()
+            try:
+                info = self.algod.account_application_info(address, self.registry_app_id)
+                app_id = int.from_bytes(get_app_info_bytes(info, "i.appid"), "big")
+                print("Found as V1 name")
+            except AlgodHTTPError:
+                return None
         return app_id
 
     def find_nfd_app_ids_by_address(self, lookup_address: str) -> list[int]:
+        app_ids = None
         b_address = decode_address(lookup_address)
-        lsig = get_nfd_revaddress_logicsig(encode_address(b_address), self.registry_app_id)
-        address = lsig.address()
+        # First try to resolve via V2
         try:
-            info = self.algod.account_application_info(address, self.registry_app_id)
+            box = self.algod.application_box_by_name(
+                self.registry_app_id, get_registry_box_name_for_address(b_address)
+            )
+            box_value = b64decode(box["value"])
+            # Get the set of nfd app ids referenced by this address - we just grab the first for now
+            app_ids = unpack_uints(box_value)
+            print(f"Found {len(app_ids)} NFDs linked as V2 address")
         except AlgodHTTPError:
-            return None
-        app_ids = unpack_uints(get_app_info_bytes(info, 'i.apps0'))
+            # error should be 404 not found and checked, but but this is simple example, so... assume it's just not found
+            # fall back to V1 approach
+            lsig = get_nfd_revaddress_logicsig(
+                encode_address(b_address), self.registry_app_id
+            )
+            address = lsig.address()
+            try:
+                # Read the local state for our registry SC from this specific account
+                info = self.algod.account_application_info(address, self.registry_app_id)
+                # We found our registry contract in the local state of the account
+                app_ids = []
+                for idx in range(16):
+                    this_key_ids = unpack_uints(get_app_info_bytes(info, f"i.apps{idx}"))
+                    if not this_key_ids:
+                        break
+                    app_ids.extend(this_key_ids)
+                print(f"Found {len(app_ids)} NFDs linked as V1 address")
+            except AlgodHTTPError:
+                return None
         return app_ids
 
     def lookup_address(self, address: str) -> list[str]:
@@ -41,16 +87,24 @@ class NFDClient:
         names = []
         if app_ids is not None:
             for app_id in app_ids:
+                # Load the global state of this NFD
                 state = get_global_state(self.algod, app_id)
-                names.append(NFDProperties(state).fetch_name())
+                # Now load all the box data (V2)
+                box_data = get_application_boxes(self.algod, app_id)
+                names.append(NFDProperties(state, box_data).fetch_name())
         return names
 
-    def lookup_name(self, nfd_name: str):
+    def lookup_name(self, nfd_name: str) -> dict:
+        """Return addresses associated with the NFD name"""
         app_id = self.find_nfd_app_id_by_name(nfd_name)
         properties = None
         if app_id is not None:
+            # Load the global state of this NFD
             state = get_global_state(self.algod, app_id)
-            properties = NFDProperties(state).fetch_addresses()
+            # Now load all the box data (V2)
+            box_data = get_application_boxes(self.algod, app_id)
+            properties = NFDProperties(state, box_data).fetch_addresses()
+            # TODO: properties['vault.a'] = get_application_address(app_id)
         return properties
 
 
@@ -59,9 +113,7 @@ class NFDTestnetClient(NFDClient):
         if algod_client is None:
             algod_client = AlgodClient("", "https://testnet-api.algonode.cloud")
         super().__init__(
-                algod_client,
-                registry_app_id=TESTNET_REGISTRY_APP_ID,
-                network="testnet"
+            algod_client, registry_app_id=TESTNET_REGISTRY_APP_ID, network="testnet"
         )
 
 
@@ -70,7 +122,5 @@ class NFDMainnetClient(NFDClient):
         if algod_client is None:
             algod_client = AlgodClient("", "https://mainnet-api.algonode.cloud")
         super().__init__(
-                algod_client,
-                registry_app_id=MAINNET_REGISTRY_APP_ID,
-                network="mainnet"
+            algod_client, registry_app_id=MAINNET_REGISTRY_APP_ID, network="mainnet"
         )
