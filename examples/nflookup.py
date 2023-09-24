@@ -1,11 +1,15 @@
 import sys
+import logging
 from algosdk.v2client.algod import AlgodClient
 from nfdlookup.client import NFDMainnetClient
 from algosdk.encoding import is_valid_address
 
 
+logging.basicConfig(level=logging.DEBUG)
+
+
 def print_addresses(client: NFDMainnetClient, name: str):
-    filter_out = ["i.commission1Agent", "i.seller"]
+    filter_out = ["i.commission", "i.seller"]
     res = client.lookup_name(name)
     if res is not None:
         for key in res:

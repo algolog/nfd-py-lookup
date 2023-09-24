@@ -1,3 +1,4 @@
+from logging import getLogger
 from base64 import b64encode, b64decode
 from algosdk.v2client.algod import AlgodClient
 from algosdk.error import AlgodHTTPError
@@ -12,6 +13,9 @@ from .contracts import (
 )
 from .nfdproperties import NFDProperties
 from .utils import unpack_uints, get_global_state, get_app_info_bytes, get_application_boxes
+
+
+logger = getLogger(__name__)
 
 
 class NFDClient:
@@ -34,7 +38,7 @@ class NFDClient:
                     f"box data is invalid - {len(box_value)=} but should be 16 for {nfd_name=}"
                 )
             app_id = int.from_bytes(box_value[8:], "big")
-            print("Found as V2 name")
+            logger.debug("Found as V2 name")
         except AlgodHTTPError:
             # Fall back to V1 approach
             lsig = get_nfd_name_logicsig(nfd_name, self.registry_app_id)
@@ -42,7 +46,7 @@ class NFDClient:
             try:
                 info = self.algod.account_application_info(address, self.registry_app_id)
                 app_id = int.from_bytes(get_app_info_bytes(info, "i.appid"), "big")
-                print("Found as V1 name")
+                logger.debug("Found as V1 name")
             except AlgodHTTPError:
                 return None
         return app_id
@@ -58,7 +62,7 @@ class NFDClient:
             box_value = b64decode(box["value"])
             # Get the set of nfd app ids referenced by this address - we just grab the first for now
             app_ids = unpack_uints(box_value)
-            print(f"Found {len(app_ids)} NFDs linked as V2 address")
+            logger.debug(f"Found {len(app_ids)} NFDs linked as V2 address")
         except AlgodHTTPError:
             # error should be 404 not found and checked, but but this is simple example, so... assume it's just not found
             # fall back to V1 approach
@@ -76,7 +80,7 @@ class NFDClient:
                     if not this_key_ids:
                         break
                     app_ids.extend(this_key_ids)
-                print(f"Found {len(app_ids)} NFDs linked as V1 address")
+                logger.debug(f"Found {len(app_ids)} NFDs linked as V1 address")
             except AlgodHTTPError:
                 return None
         return app_ids
