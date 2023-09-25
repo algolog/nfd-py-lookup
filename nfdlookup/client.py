@@ -38,15 +38,17 @@ class NFDClient:
                     f"box data is invalid - {len(box_value)=} but should be 16 for {nfd_name=}"
                 )
             app_id = int.from_bytes(box_value[8:], "big")
-            logger.debug("Found as V2 name")
+            logger.debug(f"Found as V2 name, appID: {app_id}")
         except AlgodHTTPError:
             # Fall back to V1 approach
             lsig = get_nfd_name_logicsig(nfd_name, self.registry_app_id)
             address = lsig.address()
+            logger.debug(f"V1 LSIG address used: {address}")
             try:
                 info = self.algod.account_application_info(address, self.registry_app_id)
+                # We found our registry contract in the local state of the account
                 app_id = int.from_bytes(get_app_info_bytes(info, "i.appid"), "big")
-                logger.debug("Found as V1 name")
+                logger.debug(f"Found as V1 name, appID: {app_id}")
             except AlgodHTTPError:
                 return None
         return app_id
@@ -64,12 +66,13 @@ class NFDClient:
             app_ids = unpack_uints(box_value)
             logger.debug(f"Found {len(app_ids)} NFDs linked as V2 address")
         except AlgodHTTPError:
-            # error should be 404 not found and checked, but but this is simple example, so... assume it's just not found
+            # TODO: check that error was 404 - Not Found
             # fall back to V1 approach
             lsig = get_nfd_revaddress_logicsig(
                 encode_address(b_address), self.registry_app_id
             )
             address = lsig.address()
+            logger.debug(f"V1 LSIG rev-address used: {address}")
             try:
                 # Read the local state for our registry SC from this specific account
                 info = self.algod.account_application_info(address, self.registry_app_id)
@@ -108,8 +111,28 @@ class NFDClient:
             # Now load all the box data (V2)
             box_data = get_application_boxes(self.algod, app_id)
             properties = NFDProperties(state, box_data).fetch_addresses()
-            # TODO: properties['vault.a'] = get_application_address(app_id)
+            logger.debug(f"Vault address for {nfd_name}: {get_application_address(app_id)}")
         return properties
+
+    def lookup_opted_and_owned_by(self, address: str) -> list[str]:
+        """Return list of NFDs both opted-in and owned by address"""
+        account_assets = self.algod.account_info(address).get("assets", [])
+        names = []
+        for asset in account_assets:
+            try:
+                asset_info = self.algod.asset_info(asset["asset-id"])
+            except AlgodHTTPError:
+                continue
+            params = asset_info["params"]
+            if (
+                params.get("unit-name") == "NFD"
+                and params.get("decimals") == 0
+                and params.get("total") == 1
+                # assume that NFD name fits into ASA name (not always the case)
+                and self.lookup_name(params["name"]).get("i.owner.a") == address
+            ):
+                names.append(params["name"])
+        return names
 
 
 class NFDTestnetClient(NFDClient):
