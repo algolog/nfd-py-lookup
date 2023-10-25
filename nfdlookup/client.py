@@ -37,8 +37,9 @@ class NFDClient:
                 raise ValueError(
                     f"box data is invalid - {len(box_value)=} but should be 16 for {nfd_name=}"
                 )
+            asa_id = int.from_bytes(box_value[:8], "big")
             app_id = int.from_bytes(box_value[8:], "big")
-            logger.debug(f"Found as V2 name, appID: {app_id}")
+            logger.debug(f"Found as V2 name, asaID: {asa_id}, appID: {app_id}")
         except AlgodHTTPError:
             # Fall back to V1 approach
             lsig = get_nfd_name_logicsig(nfd_name, self.registry_app_id)
